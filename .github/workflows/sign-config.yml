@@ -1,0 +1,85 @@
+name: Sign Config
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'urls.txt.sig'
+      - 'expiry.json.sig'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sign config files
+        env:
+          CONFIG_SIGNING_PRIVATE_KEY_B64: ${{ secrets.CONFIG_SIGNING_PRIVATE_KEY_B64 }}
+        run: |
+          printf "%s" "$CONFIG_SIGNING_PRIVATE_KEY_B64" \
+            | tr -d "[:space:]" \
+            | base64 --decode \
+            > "$RUNNER_TEMP/config-private.pem"
+
+          chmod 600 "$RUNNER_TEMP/config-private.pem"
+
+          echo "Validating config signing key..."
+          openssl pkey \
+            -in "$RUNNER_TEMP/config-private.pem" \
+            -noout
+
+          echo "Signing urls.txt..."
+          openssl dgst -sha256 \
+            -sign "$RUNNER_TEMP/config-private.pem" \
+            -out "$RUNNER_TEMP/urls.sig.bin" \
+            urls.txt
+
+          base64 -w 0 "$RUNNER_TEMP/urls.sig.bin" > urls.txt.sig
+          echo >> urls.txt.sig
+
+          echo "Signing expiry.json..."
+          openssl dgst -sha256 \
+            -sign "$RUNNER_TEMP/config-private.pem" \
+            -out "$RUNNER_TEMP/expiry.sig.bin" \
+            expiry.json
+
+          base64 -w 0 "$RUNNER_TEMP/expiry.sig.bin" > expiry.json.sig
+          echo >> expiry.json.sig
+
+          rm -f "$RUNNER_TEMP/config-private.pem"
+
+      - name: Verify signatures
+        run: |
+          base64 --decode expiry.json.sig > "$RUNNER_TEMP/expiry.sig.bin"
+          base64 --decode urls.txt.sig > "$RUNNER_TEMP/urls.sig.bin"
+
+          openssl dgst -sha256 \
+            -verify "$GITHUB_WORKSPACE/config_public.pem" \
+            -signature "$RUNNER_TEMP/expiry.sig.bin" \
+            expiry.json
+
+          openssl dgst -sha256 \
+            -verify "$GITHUB_WORKSPACE/config_public.pem" \
+            -signature "$RUNNER_TEMP/urls.sig.bin" \
+            urls.txt
+
+      - name: Commit updated signatures
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add urls.txt.sig expiry.json.sig
+
+          if git diff --cached --quiet; then
+            echo "Config signatures sudah terbaru."
+          else
+            git commit -m "chore: update config signatures [skip ci]"
+            git push origin HEAD:main
+          fi
