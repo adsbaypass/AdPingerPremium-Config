@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "expires_at": "2026-10-07T23:59:59Z",
+  "expires_at": "2026-10-13T23:59:59Z",
   "package_name": "com.dbzbanten.adpinger",
   "min_version_code": 1,
   "signature_sha256": "E4:97:7C:F6:62:E0:91:8F:F2:05:C9:92:4B:17:A4:04:54:67:2B:70:A0:9C:D4:1C:66:4D:02:08:03:AF:FD:A9",
